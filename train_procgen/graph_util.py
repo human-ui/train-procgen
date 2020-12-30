@@ -7,7 +7,8 @@ from constants import ENV_NAMES
 
 import seaborn  # sets some style parameters automatically
 
-COLORS = [(57, 106, 177), (218, 124, 48)]
+# COLORS = [(57, 106, 177), (218, 124, 48)]
+YLIM = (-0.5, 1)
 
 
 def switch_to_outer_plot(fig):
@@ -87,7 +88,7 @@ def plot_values(ax, all_values, title=None, max_x=0, label=None, data_x=None, is
         ax.set_title(title)
         ax.set_xlim((0, 8e6))
         if is_normalized:
-            ax.set_ylim((-0.2, 1))
+            ax.set_ylim(YLIM)
 
     return all_values
 
@@ -144,12 +145,22 @@ def plot_experiment(axarr,
                              data_x=raw_data_x,
                              is_normalized=is_normalized,
                              **kwargs)
-        all_values.append(values)
+
+        if will_reduce:
+            if len(all_values) > 0 and all_values[-1].shape != values.shape:
+                print(f'Fixing inconsistent dimension in {env_name} from {values.shape} to {all_values[-1].shape}...')
+                values = values.reshape(all_values[-1].shape + (-1,)).mean(axis=-1)
+            all_values.append(values)
 
     if will_reduce:
+        # print([v.shape for v in all_values])
+        all_values = np.array(all_values)
         normalized_data = np.mean(all_values, axis=0)
+        nx = normalized_data.shape[-1]
+        nlast = nx // 16  # last 500k steps
+        print(f'All: {all_values.shape}  Reduced: {normalized_data.shape}  Last {nlast}: {normalized_data[:,-nlast:].mean()}')
         title = 'Mean Normalized Score'
-        plot_values(axarr, normalized_data, title=None, color=color, label=label, **kwargs)
+        plot_values(axarr, normalized_data, data_x=raw_data_x, title=None, color=color, label=label, **kwargs)
 
 
 def plot_experiments(will_reduce, env_names, args_list):
@@ -172,6 +183,6 @@ def plot_experiments(will_reduce, env_names, args_list):
         if num_visible_plots == 1:
             axarr.legend(loc='lower right')
         else:
-            f.legend(loc='lower right', bbox_to_anchor=(.5, 0, .5, 1))
+            f.legend(loc='lower left')
 
     return f, axarr
