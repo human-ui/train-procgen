@@ -34,9 +34,9 @@ def ema(data_in, smoothing=0):
     return data_out
 
 
-def plot_data_mean_std(ax, data_y, color_idx=0, data_x=None, x_scale=1, smoothing=0, first_valid=0, label=None):
-    color = COLORS[color_idx]
-    hexcolor = '#%02x%02x%02x' % color
+def plot_data_mean_std(ax, data_y, color, data_x=None, x_scale=1, smoothing=0, first_valid=0, label=None):
+    # color = COLORS[color_idx]
+    # hexcolor = '#%02x%02x%02x' % color
 
     data_y = data_y[:, first_valid:]
     nx, num_datapoint = np.shape(data_y)
@@ -51,11 +51,11 @@ def plot_data_mean_std(ax, data_y, color_idx=0, data_x=None, x_scale=1, smoothin
         data_x = data_x[first_valid:]
 
     data_mean = np.mean(data_y, axis=0)
-    ax.plot(data_x, data_mean, color=hexcolor, label=label, linestyle='solid', alpha=1, rasterized=True)
+    ax.plot(data_x, data_mean, color=color, label=label, linestyle='solid', alpha=1, rasterized=True)
 
     if data_y.shape[0] > 1:
         data_std = np.std(data_y, axis=0, ddof=1)
-        ax.fill_between(data_x, data_mean - data_std, data_mean + data_std, color=hexcolor, alpha=.25, linewidth=0.0, rasterized=True)
+        ax.fill_between(data_x, data_mean - data_std, data_mean + data_std, color=color, alpha=.25, linewidth=0.0, rasterized=True)
 
 
 def read_csv(filename, key_name):
@@ -85,6 +85,7 @@ def plot_values(ax, all_values, title=None, max_x=0, label=None, data_x=None, is
     if ax is not None:
         plot_data_mean_std(ax, all_values, label=label, data_x=data_x, **kwargs)
         ax.set_title(title)
+        ax.set_xlim((0, 8e6))
         if is_normalized:
             ax.set_ylim((-0.2, 1))
 
@@ -92,7 +93,7 @@ def plot_values(ax, all_values, title=None, max_x=0, label=None, data_x=None, is
 
 
 def plot_experiment(axarr,
-                    series_idx,
+                    color='#000000',
                     label='',
                     run_directory_prefix='',
                     titles=None,
@@ -138,7 +139,7 @@ def plot_experiment(axarr,
 
         values = plot_values(curr_ax, raw_data,
                              title=env_name,
-                             color_idx=series_idx,
+                             color=color,
                              label=label if env_idx == 0 else None,  # only label the first graph to avoid legend duplicates,
                              data_x=raw_data_x,
                              is_normalized=is_normalized,
@@ -148,7 +149,7 @@ def plot_experiment(axarr,
     if will_reduce:
         normalized_data = np.mean(all_values, axis=0)
         title = 'Mean Normalized Score'
-        plot_values(axarr, normalized_data, title=None, color_idx=series_idx, label=label, **kwargs)
+        plot_values(axarr, normalized_data, title=None, color=color, label=label, **kwargs)
 
 
 def plot_experiments(will_reduce, env_names, args_list):
@@ -165,7 +166,7 @@ def plot_experiments(will_reduce, env_names, args_list):
         f, axarr = plt.subplots(dimx, dimy, sharex=True)
 
     for idx, args in enumerate(args_list):
-        plot_experiment(axarr, idx, env_names=env_names, will_reduce=will_reduce, **args)
+        plot_experiment(axarr, env_names=env_names, will_reduce=will_reduce, **args)
 
     if len(args_list) > 1:
         if num_visible_plots == 1:
