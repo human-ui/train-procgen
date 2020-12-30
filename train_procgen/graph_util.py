@@ -47,6 +47,8 @@ def plot_data_mean_std(ax, data_y, color_idx=0, data_x=None, x_scale=1, smoothin
 
     if data_x is None:
         data_x = (np.array(range(num_datapoint)) + first_valid) * x_scale
+    else:
+        data_x = data_x[first_valid:]
 
     data_mean = np.mean(data_y, axis=0)
     ax.plot(data_x, data_mean, color=hexcolor, label=label, linestyle='solid', alpha=1, rasterized=True)
@@ -74,7 +76,7 @@ def read_csv(filename, key_name):
     return np.array(values, dtype=np.float32)
 
 
-def plot_values(ax, all_values, title=None, max_x=0, label=None, data_x=None, **kwargs):
+def plot_values(ax, all_values, title=None, max_x=0, label=None, data_x=None, is_normalized=False, **kwargs):
     if max_x > 0:
         all_values = all_values[..., :max_x]
         if data_x is not None:
@@ -83,11 +85,16 @@ def plot_values(ax, all_values, title=None, max_x=0, label=None, data_x=None, **
     if ax is not None:
         plot_data_mean_std(ax, all_values, label=label, data_x=data_x, **kwargs)
         ax.set_title(title)
+        if is_normalized:
+            ax.set_ylim((-0.2, 1))
 
     return all_values
 
 
-def plot_experiment(run_directory_prefix,
+def plot_experiment(axarr,
+                    series_idx,
+                    label='',
+                    run_directory_prefix='',
                     titles=None,
                     suffixes=[''],
                     key_name='eprewmean',
@@ -101,6 +108,53 @@ def plot_experiment(run_directory_prefix,
 
     env_names = env_names or ENV_NAMES
     num_envs = len(env_names)
+    is_normalized = normalization_ranges is not None
+
+    all_values = []
+
+    for env_idx in range(num_envs):
+        env_name = env_names[env_idx]
+
+        # print(f'loading results from {env_name}...')
+        csv_files = [f"results/{resid}/progress-{env_name}.csv" for resid in run_folders]
+
+        if not will_reduce:
+            dimy = len(axarr[0])
+            curr_ax = axarr[env_idx // dimy][env_idx % dimy]
+        else:
+            curr_ax = None
+
+        raw_data = np.array([read_csv(file, key_name) for file in csv_files])
+
+        raw_data_x = None
+        if x_key_name:
+            raw_data_x = read_csv(csv_files[0], x_key_name)
+
+        if is_normalized:
+            game_range = normalization_ranges[env_name]
+            game_min = game_range[0]
+            game_max = game_range[1]
+            raw_data = (np.array(raw_data) - game_min) / (game_max - game_min)
+
+        values = plot_values(curr_ax, raw_data,
+                             title=env_name,
+                             color_idx=series_idx,
+                             label=label if env_idx == 0 else None,  # only label the first graph to avoid legend duplicates,
+                             data_x=raw_data_x,
+                             is_normalized=is_normalized,
+                             **kwargs)
+        all_values.append(values)
+
+    if will_reduce:
+        normalized_data = np.mean(all_values, axis=0)
+        title = 'Mean Normalized Score'
+        plot_values(axarr, normalized_data, title=None, color_idx=series_idx, label=label, **kwargs)
+
+
+def plot_experiments(will_reduce, env_names, args_list):
+
+    env_names = env_names or ENV_NAMES
+    num_envs = len(env_names)
 
     if will_reduce:
         num_visible_plots = 1
@@ -110,48 +164,12 @@ def plot_experiment(run_directory_prefix,
         dimx = dimy = ceil(np.sqrt(num_visible_plots))
         f, axarr = plt.subplots(dimx, dimy, sharex=True)
 
-    for suffix_idx, suffix in enumerate(suffixes):
-        all_values = []
+    for idx, args in enumerate(args_list):
+        plot_experiment(axarr, idx, env_names=env_names, will_reduce=will_reduce, **args)
 
-        for env_idx in range(num_envs):
-            env_name = env_names[env_idx]
-            label = suffix if env_idx == 0 else None  # only label the first graph to avoid legend duplicates
-            # print(f'loading results from {env_name}...')
-
-            if num_visible_plots == 1:
-                ax = axarr
-            else:
-                dimy = len(axarr[0])
-                ax = axarr[env_idx // dimy][env_idx % dimy]
-
-            csv_files = [f"results/{resid}/progress-{env_name}{'-' if len(suffix) > 0 else ''}{suffix}.csv" for resid in run_folders]
-            curr_ax = None if will_reduce else ax
-
-            raw_data = np.array([read_csv(file, key_name) for file in csv_files])
-
-            raw_data_x = None
-            if x_key_name:
-                raw_data_x = read_csv(csv_files[0], x_key_name)
-
-            if normalization_ranges is not None:
-                game_range = normalization_ranges[env_name]
-                game_min = game_range[0]
-                game_max = game_range[1]
-                raw_data = (np.array(raw_data) - game_min) / (game_max - game_min)
-
-            values = plot_values(curr_ax, raw_data, title=env_name, color_idx=suffix_idx, label=label, data_x=raw_data_x, **kwargs)
-            all_values.append(values)
-
-            
-
-        if will_reduce:
-            normalized_data = np.mean(all_values, axis=0)
-            title = 'Mean Normalized Score'
-            plot_values(ax, normalized_data, title=None, color_idx=suffix_idx, label=suffix, **kwargs)
-
-    if len(suffixes) > 1:
+    if len(args_list) > 1:
         if num_visible_plots == 1:
-            ax.legend(loc='lower right')
+            axarr.legend(loc='lower right')
         else:
             f.legend(loc='lower right', bbox_to_anchor=(.5, 0, .5, 1))
 
